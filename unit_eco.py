@@ -6,27 +6,88 @@ from pyperclip import copy
 
 win = tk.Tk()
 win.title("Unit Economics")
-win.geometry("500x270")
+win.geometry("650x300")
+
 
 # --- Логика
+def create_label(text, row, column):
+    tk.Label(win, text=text).grid(row=row, column=column, sticky="w", padx=3)
 
 
-def int_r(num):
-    num = int(float(num) + 0.5)
-    return num
+def place_entry(entry, row, column):
+    entry.grid(row=row, column=column, padx=3, sticky="we")
+    entry.bind("<FocusIn>", lambda event: clean(entry))
 
 
 def clean(field):
     value = field.get()
-    field["fg"] = "black"
     if value == mandatory or value == not_digit:
+        field["fg"] = "black"
         field.delete(0, tk.END)
+
+
+def place_bt(bt, row, column):
+    bt.grid(row=row, column=column, padx=3, sticky="we")
+    bt["command"] = lambda: copy_to_clip(bt["text"])
 
 
 def copy_to_clip(text):
     if text:
-        copy(text)
+        copy(text[:-2])
         messagebox.showinfo("Успех", "Скопировано")
+
+
+def add_bt_text(bt, value):
+    bt["text"] = f"{round(value, 2)} ¥"
+
+
+# --- Функции для рассчета
+def calculate():
+    if validate():
+        density, total_volume, total_weight = calc_density()
+        log = calc_log(density, total_volume, total_weight)
+        calc_totals(total_volume, log)
+
+
+def calc_density():
+    box_amount = ceil(int(prod_amount.get()) / int(amount_in_box.get()))
+    origin_weight = box_amount * float(box_weight.get())
+    demension = float(height.get()) * float(width.get()) * float(length.get())
+    volume = demension * box_amount / 1000000
+    total_weight = ceil(origin_weight + (volume / 2 * 50))
+    total_volume = volume + (volume / 2 * 0.5)
+    density = total_weight / total_volume
+    return density, total_volume, total_weight
+
+
+def calc_log(density, total_volume, total_weight):
+    if density >= 100:
+        cargo_coeff = cargo_dict[max(filter(lambda k: k <= density, cargo_dict.keys()))]
+        cargo_coeff = cargo_coeff - discount
+        log_price = cargo_coeff * total_weight * 7.25
+    else:
+        log_price = 600 * total_volume
+
+    return log_price
+
+
+def calc_totals(total_volume, log_price):
+    goods_cost_val = float(price.get()) * int(prod_amount.get())
+    add_bt_text(goods_cost_bt, goods_cost_val)
+
+    package_val = total_volume * 210
+    add_bt_text(package_bt, package_val)
+
+    insurance_val = goods_cost_val / 100
+    add_bt_text(insurance_bt, insurance_val)
+
+    total_cost_val = goods_cost_val + package_val + log_price + insurance_val
+    add_bt_text(total_cost_bt, total_cost_val)
+
+    one_goods_val = total_cost_val / int(prod_amount.get())
+    add_bt_text(one_goods_bt, one_goods_val)
+
+    add_bt_text(log_bt, log_price)
 
 
 mandatory = "Обязательное поле"
@@ -41,115 +102,86 @@ def validate():
             field.insert(0, mandatory)
             field["fg"] = "red"
             valid = 0
-
         elif field.get() == mandatory:
             valid = 0
             continue
-
         elif field.get() == not_digit:
             field.delete(0, tk.END)
             field.insert(0, mandatory)
             valid = 0
-
         elif not field.get().isdigit():
             field.delete(0, tk.END)
             field.insert(0, not_digit)
             field["fg"] = "red"
             valid = 0
-        else:
-            field["fg"] = "black"
-
     return valid
-
-
-def calculate():
-    if validate():
-        box_amount = ceil(int(prod_amount.get()) / int(amount_in_box.get()))
-        total_weight = box_amount * float(box_weight.get())
-        volume = (
-            int_r(height.get())
-            * int_r(width.get())
-            * int_r(length.get())
-            * box_amount
-            / 1000000
-        )
-        total_weight = ceil(total_weight + (volume / 2 * 50))
-        total_volume = volume + (volume / 2 * 0.5)
-        density = round(total_weight / total_volume, 2)
-
-        log = calc_log(density, total_volume, total_weight)
-        count_total(total_volume, log)
-
-
-def count_total(total_volume, log):
-    goods_cost = float(price.get()) * int(prod_amount.get())
-    goods_cost_bt["text"] = f"{round(goods_cost, 2)} ¥"
-
-    package = total_volume * 210
-    package_bt["text"] = f"{round(package, 2)} ¥"
-
-    insurance = goods_cost / 100
-    insurance_bt["text"] = f"{insurance} ¥"
-
-    total_cost = goods_cost + package + log + insurance
-    total_cost_bt["text"] = f"{round(total_cost, 2)} ¥"
-
-    one_goods = total_cost / int(prod_amount.get())
-    one_goods_bt["text"] = f"{round(one_goods, 2)} ¥"
-
-
-def calc_log(density, total_volume, total_weight):
-    log = (
-        (cargo_dict[max(filter(lambda x: x <= density, cargo_dict.keys()))] - discount)
-        * total_weight
-        * 7.25
-        if density >= 100
-        else 600 * total_volume
-    )
-    log_bt["text"] = f"{round(log, 2)} ¥"
-    return log
 
 
 # --- Параметры
 
-tk.Label(win, text="Товар").grid(row=0, column=0, sticky="w")
+create_label("Товар", 0, 0)
 product = tk.Entry(win)
-product.grid(row=1, column=0)
+place_entry(product, 1, 0)
 
-tk.Label(win, text="Цена").grid(row=0, column=1, sticky="w")
+create_label("Цена в Китае", 0, 1)
 price = tk.Entry(win)
-price.bind("<FocusIn>", lambda event: clean(price))
-price.grid(row=1, column=1)
+place_entry(price, 1, 1)
 
-tk.Label(win, text="Количество").grid(row=0, column=2, sticky="w")
+create_label("Количество", 0, 2)
 prod_amount = tk.Entry(win)
-prod_amount.bind("<FocusIn>", lambda event: clean(prod_amount))
-prod_amount.grid(row=1, column=2)
+place_entry(prod_amount, 1, 2)
 
-tk.Label(win, text="Высота").grid(row=2, column=0, sticky="w")
+create_label("Высота", 2, 0)
 height = tk.Entry(win)
-height.bind("<FocusIn>", lambda event: clean(height))
-height.grid(row=3, column=0)
+place_entry(height, 3, 0)
 
-tk.Label(win, text="Ширина").grid(row=2, column=1, sticky="w")
+create_label("Ширина", 2, 1)
 width = tk.Entry(win)
-width.bind("<FocusIn>", lambda event: clean(width))
-width.grid(row=3, column=1)
+place_entry(width, 3, 1)
 
-tk.Label(win, text="Длина").grid(row=2, column=2, sticky="w")
+create_label("Длина", 2, 2)
 length = tk.Entry(win)
-length.bind("<FocusIn>", lambda event: clean(length))
-length.grid(row=3, column=2)
+place_entry(length, 3, 2)
 
-tk.Label(win, text="Кол. шт. в коробке").grid(row=4, column=0, sticky="w")
+create_label("Кол. шт. в коробке", 4, 0)
 amount_in_box = tk.Entry(win)
-amount_in_box.bind("<FocusIn>", lambda event: clean(amount_in_box))
-amount_in_box.grid(row=5, column=0)
+place_entry(amount_in_box, 5, 0)
 
-tk.Label(win, text="Вес").grid(row=4, column=1, sticky="w")
+create_label("Вес", 4, 1)
 box_weight = tk.Entry(win)
-box_weight.bind("<FocusIn>", lambda event: clean(box_weight))
-box_weight.grid(row=5, column=1)
+place_entry(box_weight, 5, 1)
+
+# --- Рассчет
+
+create_label("Стоимость товара", 6, 0)
+goods_cost_bt = tk.Button(win)
+place_bt(goods_cost_bt, 7, 0)
+
+create_label("Стоимость товара", 6, 1)
+package_bt = tk.Button(win)
+place_bt(package_bt, 7, 1)
+
+create_label("Страховка", 6, 2)
+insurance_bt = tk.Button(win)
+place_bt(insurance_bt, 7, 2)
+
+create_label("Стоимость груза", 8, 0)
+total_cost_bt = tk.Button(win)
+place_bt(total_cost_bt, 9, 0)
+
+create_label("За единицу", 8, 1)
+one_goods_bt = tk.Button(win)
+place_bt(one_goods_bt, 9, 1)
+
+create_label("Логистика", 8, 2)
+log_bt = tk.Button(win)
+place_bt(log_bt, 9, 2)
+
+win.grid_columnconfigure(0, weight=1)
+win.grid_columnconfigure(1, weight=1)
+win.grid_columnconfigure(2, weight=1)
+
+# --- Кнопка рассчета
 
 fields = [price, prod_amount, height, width, length, amount_in_box, box_weight]
 
@@ -157,37 +189,7 @@ tk.Button(win, text="Рассчитать", command=calculate).grid(
     row=4, column=2, sticky="wens", rowspan=2, pady=3, padx=3
 )
 
-# --- Рассчет
-
-tk.Label(win, text="Стоимость товара").grid(row=6, column=0, sticky="w", padx=3)
-goods_cost_bt = tk.Button(win, state=tk.DISABLED)
-goods_cost_bt.grid(row=7, column=0, sticky="we", padx=3)
-
-tk.Label(win, text="Упаковка").grid(row=6, column=1, sticky="w", padx=3)
-package_bt = tk.Button(win, state=tk.DISABLED)
-package_bt.grid(row=7, column=1, sticky="we", padx=3)
-
-tk.Label(win, text="Страховка").grid(row=6, column=2, sticky="w", padx=3)
-insurance_bt = tk.Button(win, state=tk.DISABLED)
-insurance_bt.grid(row=7, column=2, sticky="we", padx=3)
-
-tk.Label(win, text="Стоимость груза").grid(row=8, column=0, sticky="w", padx=3)
-total_cost_bt = tk.Button(win)
-total_cost_bt["command"] = lambda: copy_to_clip(total_cost_bt["text"])
-total_cost_bt.grid(row=9, column=0, sticky="we", padx=3)
-
-tk.Label(win, text="За штуку").grid(row=8, column=1, sticky="w", padx=3)
-one_goods_bt = tk.Button(win, state=tk.DISABLED)
-one_goods_bt.grid(row=9, column=1, sticky="we", padx=3)
-
-tk.Label(win, text="Логистика").grid(row=8, column=2, sticky="w", padx=3)
-log_bt = tk.Button(win, state=tk.DISABLED)
-log_bt.grid(row=9, column=2, sticky="we", padx=3)
-
-win.grid_columnconfigure(0, weight=1)
-win.grid_columnconfigure(1, weight=1)
-win.grid_columnconfigure(2, weight=1)
-
+# --- Коэффициент карго
 discount = 0.2
 cargo_dict = {
     400: 2.2,
