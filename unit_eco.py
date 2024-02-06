@@ -7,7 +7,7 @@ from pyperclip import copy
 
 win = tk.Tk()
 win.title("Unit Economics")
-win.geometry("650x550")
+win.geometry("650x600")
 
 
 # --- Логика
@@ -42,7 +42,7 @@ def add_bt_text(bt, value):
     bt["text"] = f"{round(value, 2)} ¥"
 
 
-integer = " (введите целое число)"
+integer = "Введите целое число"
 
 
 def is_int(entry):
@@ -74,7 +74,7 @@ def calc_density():
     total_volume = volume + (volume / 2 * 0.5)
     density = total_weight / total_volume
 
-    return density, total_volume, total_weight
+    return 90, total_volume, total_weight
 
 
 def calc_log(density, total_volume, total_weight):
@@ -85,7 +85,7 @@ def calc_log(density, total_volume, total_weight):
         cargo_coeff = float(cargo_coeff) - discount
         log_price = cargo_coeff * total_weight * 7.25
     else:
-        log_price = 600 * total_volume
+        log_price = float(density) * total_volume
 
     return log_price
 
@@ -221,6 +221,7 @@ tk.Button(win, text="Рассчитать", command=calculate).grid(
 # --- Cargo Таблица
 
 discount = 0.2
+
 with open("cargo_data.json", "r") as file:
     cargo_dict = json.load(file)
 
@@ -230,11 +231,15 @@ coeff_var = tk.StringVar(value="")
 
 
 def item_selected(event):
-    for selected_item in tree.selection():
+    selected_item = tree.selection()
+    if selected_item:
         item = tree.item(selected_item)
         record = item["values"]
         no_var.set(record[0]), den_var.set(record[1])
-        coeff_var.set(record[2])
+        coeff_var.set(str(record[2]))
+        coeff.focus_set()
+        # Record return int if it's not float
+        coeff.icursor(len(str(record[2])))
 
 
 def save_cargo():
@@ -245,13 +250,17 @@ def save_cargo():
             coeff.delete(0, tk.END)
             coeff.insert(0, upd_val)
 
-        cargo_dict[str(den_var.get())] = float(coeff.get())
+        number = float(coeff.get())
+        number = f"{number:.0f}" if number.is_integer() else f"{number}"
+        cargo_dict[str(den_var.get())] = str(number)
 
         with open("cargo_data.json", "w") as file:
             json.dump(cargo_dict, file)
 
         tree.delete(*tree.get_children())
         load_table(cargo_dict)
+        no_var.set(""), den_var.set(""), coeff_var.set("")
+        win.focus_set()
 
 
 def load_table(cargo_dict):
@@ -262,9 +271,9 @@ def load_table(cargo_dict):
 columns = ("No", "Density", "Coeff")
 tree = ttk.Treeview(win, columns=columns, show="headings")
 
-tree.bind("<<TreeviewSelect>>", item_selected)
+item = tree.bind("<<TreeviewSelect>>", item_selected)
 
-tree.grid(row=10, column=0, columnspan=3, sticky="nsew")
+tree.grid(row=10, column=0, columnspan=3, sticky="nsew", padx=5, pady=20)
 tree.column("No", minwidth=25)
 tree.column("Density", minwidth=25)
 tree.column("Coeff", minwidth=25)
@@ -277,19 +286,19 @@ load_table(cargo_dict)
 
 scrollbar = ttk.Scrollbar(win, orient=tk.VERTICAL, command=tree.yview)
 tree.configure(yscrollcommand=scrollbar.set)
-scrollbar.grid(row=10, column=3, sticky="nsw", pady=20)
+scrollbar.grid(row=10, column=3, sticky="nsw", pady=20, padx=5)
 
 
-tk.Label(win, text="No").grid(row=11, column=0, sticky="w")
-tk.Label(win, text="Плотность").grid(row=11, column=1, sticky="w")
-tk.Label(win, text="Коэффициент").grid(row=11, column=2, sticky="w")
+tk.Label(win, text="No").grid(row=11, column=0, sticky="w", padx=3)
+tk.Label(win, text="Плотность").grid(row=11, column=1, sticky="w", padx=3)
+tk.Label(win, text="Коэффициент").grid(row=11, column=2, sticky="w", padx=3)
 
-no = tk.Label(win, borderwidth=1, relief="ridge", anchor="w", textvariable=no_var)
-no.grid(row=12, column=0, sticky="we")
-den = tk.Label(win, borderwidth=1, relief="ridge", anchor="w", textvariable=den_var)
-den.grid(row=12, column=1, sticky="we")
+no = tk.Label(win, borderwidth=1, relief="ridge", textvariable=no_var)
+no.grid(row=12, column=0, sticky="we", padx=5)
+den = tk.Label(win, borderwidth=1, relief="ridge", textvariable=den_var)
+den.grid(row=12, column=1, sticky="we", padx=5)
 coeff = tk.Entry(win, textvariable=coeff_var)
-coeff.grid(row=12, column=2, sticky="we")
+coeff.grid(row=12, column=2, sticky="we", padx=5)
 
 
 tk.Button(win, text="Сохранить", command=save_cargo).grid(
