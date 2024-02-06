@@ -74,7 +74,7 @@ def calc_density():
     total_volume = volume + (volume / 2 * 0.5)
     density = total_weight / total_volume
 
-    return 90, total_volume, total_weight
+    return density, total_volume, total_weight
 
 
 def calc_log(density, total_volume, total_weight):
@@ -218,7 +218,7 @@ tk.Button(win, text="Рассчитать", command=calculate).grid(
     row=4, column=2, sticky="wens", rowspan=2, pady=3, padx=3
 )
 
-# --- Cargo Таблица
+# --- Cargo таблица ---
 
 discount = 0.2
 
@@ -234,11 +234,10 @@ def item_selected(event):
     selected_item = tree.selection()
     if selected_item:
         item = tree.item(selected_item)
-        record = item["values"]
+        record = item["values"]  # return int I/O str if it's not float
         no_var.set(record[0]), den_var.set(record[1])
         coeff_var.set(str(record[2]))
         coeff.focus_set()
-        # Record return int if it's not float
         coeff.icursor(len(str(record[2])))
 
 
