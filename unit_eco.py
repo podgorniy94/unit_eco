@@ -7,7 +7,10 @@ from pyperclip import copy
 
 win = tk.Tk()
 win.title("Unit Economics")
-win.geometry("650x600")
+win.geometry("650x660")
+win.grid_columnconfigure(0, weight=1)
+win.grid_columnconfigure(1, weight=1)
+win.grid_columnconfigure(2, weight=1)
 
 
 # --- Логика
@@ -22,7 +25,7 @@ def place_entry(entry, row, column):
 
 def clean(field):
     value = field.get()
-    if value == mandatory or value == not_digit or value == integer or value == "0":
+    if value == mandatory or value == not_digit or value == int_notif or value == "0":
         field["fg"] = "black"
         field.delete(0, tk.END)
 
@@ -42,7 +45,7 @@ def add_bt_text(bt, value):
     bt["text"] = f"{round(value, 2)} ¥"
 
 
-integer = "Введите целое число"
+int_notif = "Введите целое число"
 
 
 def is_int(entry):
@@ -51,7 +54,7 @@ def is_int(entry):
         return True
     except ValueError:
         entry.delete(0, tk.END)
-        entry.insert(0, integer)
+        entry.insert(0, int_notif)
         entry["fg"] = "red"
         return False
 
@@ -130,7 +133,7 @@ def validate():
             field.insert(0, mandatory)
             field["fg"] = "red"
             valid = 0
-        elif value == mandatory or value == integer or value == not_digit:
+        elif value == mandatory or value == int_notif or value == not_digit:
             valid = 0
             continue
         elif value == not_digit:
@@ -184,13 +187,14 @@ create_label("Вес", 4, 1)
 box_weight = tk.Entry(win)
 place_entry(box_weight, 5, 1)
 
+
 # --- Рассчет
 
 create_label("Стоимость товара", 6, 0)
 goods_cost_bt = tk.Button(win)
 place_bt(goods_cost_bt, 7, 0)
 
-create_label("Стоимость товара", 6, 1)
+create_label("Упаковка", 6, 1)
 package_bt = tk.Button(win)
 place_bt(package_bt, 7, 1)
 
@@ -210,20 +214,15 @@ create_label("Логистика", 8, 2)
 log_bt = tk.Button(win)
 place_bt(log_bt, 9, 2)
 
-# --- Кнопка рассчета
 
 fields = [price, prod_amount, height, width, length, amount_in_box, box_weight]
 
-tk.Button(win, text="Рассчитать", command=calculate).grid(
-    row=4, column=2, sticky="wens", rowspan=2, pady=3, padx=3
-)
-
 # --- Cargo таблица ---
 
-discount = 0.2
-
 with open("cargo_data.json", "r") as file:
-    cargo_dict = json.load(file)
+    json_to_dict = json.load(file)
+    cargo_dict = json_to_dict["coeff"]
+    discount = json_to_dict["dis"]
 
 no_var = tk.IntVar(value="")
 den_var = tk.IntVar(value="")
@@ -235,7 +234,7 @@ def item_selected(event):
     if selected_item:
         item = tree.item(selected_item)
         record = item["values"]  # return int I/O str if it's not float
-        no_var.set(record[0]), den_var.set(record[1])
+        no_var.set(f"{record[0]} / {record[1]}")
         coeff_var.set(str(record[2]))
         coeff.focus_set()
         coeff.icursor(len(str(record[2])))
@@ -254,7 +253,8 @@ def save_cargo():
         cargo_dict[str(den_var.get())] = str(number)
 
         with open("cargo_data.json", "w") as file:
-            json.dump(cargo_dict, file)
+            dict_to_json = {"coefficient": cargo_dict, "dis": discount}
+            json.dump(dict_to_json, file)
 
         tree.delete(*tree.get_children())
         load_table(cargo_dict)
@@ -287,25 +287,29 @@ scrollbar = ttk.Scrollbar(win, orient=tk.VERTICAL, command=tree.yview)
 tree.configure(yscrollcommand=scrollbar.set)
 scrollbar.grid(row=10, column=3, sticky="nsw", pady=20, padx=5)
 
-
-tk.Label(win, text="No").grid(row=11, column=0, sticky="w", padx=3)
-tk.Label(win, text="Плотность").grid(row=11, column=1, sticky="w", padx=3)
+tk.Label(win, text="No / Плотность").grid(row=11, column=0, sticky="w", padx=3)
 tk.Label(win, text="Коэффициент").grid(row=11, column=2, sticky="w", padx=3)
+tk.Label(win, text="Скидка").grid(row=13, column=0, sticky="w", padx=3)
 
 no = tk.Label(win, borderwidth=1, relief="ridge", textvariable=no_var)
 no.grid(row=12, column=0, sticky="we", padx=5)
 den = tk.Label(win, borderwidth=1, relief="ridge", textvariable=den_var)
 den.grid(row=12, column=1, sticky="we", padx=5)
+
 coeff = tk.Entry(win, textvariable=coeff_var)
 coeff.grid(row=12, column=2, sticky="we", padx=5)
+dis = tk.Entry(win, text=discount)
+dis.grid(row=14, column=0, sticky="we", padx=5)
 
-
+tk.Button(win, text="Рассчитать", command=calculate).grid(
+    row=15, column=1, sticky="wens", pady=10, padx=3
+)
+tk.Button(win, text="Экспортировать в Excel", command=save_cargo).grid(
+    row=15, column=0, padx=3, pady=10, sticky="we"
+)
 tk.Button(win, text="Сохранить", command=save_cargo).grid(
-    row=13, column=2, padx=3, sticky="we"
+    row=15, column=2, padx=3, pady=10, sticky="we"
 )
 
-win.grid_columnconfigure(0, weight=1)
-win.grid_columnconfigure(1, weight=1)
-win.grid_columnconfigure(2, weight=1)
 
 win.mainloop()
