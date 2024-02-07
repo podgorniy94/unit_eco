@@ -10,7 +10,7 @@ cttk.set_appearance_mode("light")
 cttk.set_default_color_theme("dark-blue")
 
 win = cttk.CTk()
-win.title("Unit Economics")
+win.title("Calculation")
 win.geometry("660x640")
 win.grid_columnconfigure((0, 1, 2), weight=1)
 
@@ -124,7 +124,7 @@ def calc_log(density, total_volume, total_weight):
         cargo_dict, discount = read_cargo_data()
         max_den = max(filter(lambda k: int(k) <= density, cargo_dict.keys()), key=int)
         cargo_coeff = float(cargo_dict[max_den]) - discount
-        log_price = cargo_coeff * total_weight * curr_var.get()
+        log_price = cargo_coeff * total_weight * float(curr_var.get())
     else:
         log_price = float(density) * total_volume
 
@@ -225,7 +225,8 @@ box_weight = create_entry()
 place_entry(box_weight, 5, 1)
 
 
-curr_var = cttk.DoubleVar(value=7.25)
+curr_var = cttk.StringVar(value="7.25")
+
 get_curr()  # --- Getting latest USD/CNY currency
 create_label("Курс $/¥ ", 4, 2)
 currency = cttk.CTkEntry(win, textvariable=curr_var)
@@ -323,7 +324,7 @@ def create_table():
             number = dec_number(coeff_val)
             cargo_dict[den_var.get()] = str(number)
 
-            with open("cargo_data.json", "w") as file:
+            with open("data.json", "w") as file:
                 dict_to_json = {"coefficient": cargo_dict, "discount": discount}
                 json.dump(dict_to_json, file)
 
