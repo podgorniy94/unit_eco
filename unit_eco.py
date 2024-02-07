@@ -1,9 +1,10 @@
-import json
 import tkinter as tk
 from math import ceil
-from tkinter import messagebox, ttk
+from tkinter import messagebox
 
 from pyperclip import copy
+
+from calc_cargo import create_table
 
 win = tk.Tk()
 win.title("Unit Economics")
@@ -217,99 +218,11 @@ place_bt(log_bt, 9, 2)
 
 fields = [price, prod_amount, height, width, length, amount_in_box, box_weight]
 
-# --- Cargo таблица ---
-
-with open("cargo_data.json", "r") as file:
-    json_to_dict = json.load(file)
-    cargo_dict = json_to_dict["coeff"]
-    discount = json_to_dict["dis"]
-
-no_var = tk.IntVar(value="")
-den_var = tk.IntVar(value="")
-coeff_var = tk.StringVar(value="")
-
-
-def item_selected(event):
-    selected_item = tree.selection()
-    if selected_item:
-        item = tree.item(selected_item)
-        record = item["values"]  # return int I/O str if it's not float
-        no_var.set(f"{record[0]} / {record[1]}")
-        coeff_var.set(str(record[2]))
-        coeff.focus_set()
-        coeff.icursor(len(str(record[2])))
-
-
-def save_cargo():
-    if tree.selection():
-        value = coeff.get()
-        if "," in value:
-            upd_val = value.replace(",", ".")
-            coeff.delete(0, tk.END)
-            coeff.insert(0, upd_val)
-
-        number = float(coeff.get())
-        number = f"{number:.0f}" if number.is_integer() else f"{number}"
-        cargo_dict[str(den_var.get())] = str(number)
-
-        with open("cargo_data.json", "w") as file:
-            dict_to_json = {"coefficient": cargo_dict, "dis": discount}
-            json.dump(dict_to_json, file)
-
-        tree.delete(*tree.get_children())
-        load_table(cargo_dict)
-        no_var.set(""), den_var.set(""), coeff_var.set("")
-        win.focus_set()
-
-
-def load_table(cargo_dict):
-    for i, k in enumerate(cargo_dict):
-        tree.insert("", i, text=i + 1, values=(i + 1, k, cargo_dict[k]))
-
-
-columns = ("No", "Density", "Coeff")
-tree = ttk.Treeview(win, columns=columns, show="headings")
-
-item = tree.bind("<<TreeviewSelect>>", item_selected)
-
-tree.grid(row=10, column=0, columnspan=3, sticky="nsew", padx=5, pady=20)
-tree.column("No", minwidth=25)
-tree.column("Density", minwidth=25)
-tree.column("Coeff", minwidth=25)
-
-tree.heading("No", text="No", anchor=tk.CENTER)
-tree.heading("Density", text="Плотность", anchor=tk.W)
-tree.heading("Coeff", text="Коэффициент", anchor=tk.W)
-
-load_table(cargo_dict)
-
-scrollbar = ttk.Scrollbar(win, orient=tk.VERTICAL, command=tree.yview)
-tree.configure(yscrollcommand=scrollbar.set)
-scrollbar.grid(row=10, column=3, sticky="nsw", pady=20, padx=5)
-
-tk.Label(win, text="No / Плотность").grid(row=11, column=0, sticky="w", padx=3)
-tk.Label(win, text="Коэффициент").grid(row=11, column=2, sticky="w", padx=3)
-tk.Label(win, text="Скидка").grid(row=13, column=0, sticky="w", padx=3)
-
-no = tk.Label(win, borderwidth=1, relief="ridge", textvariable=no_var)
-no.grid(row=12, column=0, sticky="we", padx=5)
-den = tk.Label(win, borderwidth=1, relief="ridge", textvariable=den_var)
-den.grid(row=12, column=1, sticky="we", padx=5)
-
-coeff = tk.Entry(win, textvariable=coeff_var)
-coeff.grid(row=12, column=2, sticky="we", padx=5)
-dis = tk.Entry(win, text=discount)
-dis.grid(row=14, column=0, sticky="we", padx=5)
-
 tk.Button(win, text="Рассчитать", command=calculate).grid(
     row=15, column=1, sticky="wens", pady=10, padx=3
 )
-tk.Button(win, text="Экспортировать в Excel", command=save_cargo).grid(
-    row=15, column=0, padx=3, pady=10, sticky="we"
-)
-tk.Button(win, text="Сохранить", command=save_cargo).grid(
-    row=15, column=2, padx=3, pady=10, sticky="we"
-)
 
+# --- Creating cargo table
+create_table(win)
 
 win.mainloop()
