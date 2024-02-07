@@ -1,6 +1,8 @@
 import json
+import os
+import sys
 from math import ceil
-from tkinter import messagebox, ttk
+from tkinter import ttk
 
 import customtkinter as cttk
 import requests
@@ -16,6 +18,14 @@ win.grid_columnconfigure((0, 1, 2), weight=1)
 
 
 # --- Main Logic
+def resource_path(relative_path):
+    base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_path, relative_path)
+
+
+data = resource_path("data.json")
+
+
 def create_label(text, row, column):
     cttk.CTkLabel(win, text=text, anchor="w").grid(
         row=row, column=column, sticky="we", padx=(25, 0)
@@ -54,9 +64,8 @@ def clean(field):
 
 
 def copy_to_clip(text):
-    if text:
+    if text and text != " ":  # ctk button bug
         copy(text[:-2])
-        messagebox.showinfo("Успех", "Скопировано")
 
 
 def add_bt_text(bt, value):
@@ -77,7 +86,8 @@ def get_curr():
 
 
 def read_cargo_data():
-    with open("data.json", "r") as file:
+
+    with open(data, "r") as file:
         json_to_dict = json.load(file)
         cargo_dict = json_to_dict["coefficient"]
         discount = json_to_dict["discount"]
@@ -324,7 +334,7 @@ def create_table():
             number = dec_number(coeff_val)
             cargo_dict[den_var.get()] = str(number)
 
-            with open("data.json", "w") as file:
+            with open(data, "w") as file:
                 dict_to_json = {"coefficient": cargo_dict, "discount": discount}
                 json.dump(dict_to_json, file)
 
