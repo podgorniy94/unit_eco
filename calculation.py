@@ -2,9 +2,10 @@ import json
 import os
 import sys
 from math import ceil
-from tkinter import ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import customtkinter as cttk
+import openpyxl
 import requests
 from pyperclip import copy
 
@@ -13,11 +14,45 @@ cttk.set_default_color_theme("dark-blue")
 
 win = cttk.CTk()
 win.title("Calculation")
-win.geometry("660x640")
+win.geometry("660x650")
 win.grid_columnconfigure((0, 1, 2), weight=1)
 
 
 # --- Main Logic
+validated = 0
+
+
+def add_data_to_excel():
+    product_name = simpledialog.askstring("Товар", "Введите название товара:")
+    if product_name:
+        data = [product_name]
+    else:
+        return
+
+    if validated:
+        data = data + [entry.get() for entry in entries]
+        data.append(currency.get())
+        data = data + [button.cget("text")[:-2] for button in buttons]
+
+        try:
+            file = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
+            if file:
+                workbook = openpyxl.load_workbook(file)
+                sheet = workbook.active
+                last_column = sheet.max_column + 1
+
+                for row_num, data_item in enumerate(data, start=1):
+                    sheet.cell(row=row_num, column=last_column, value=data_item)
+                workbook.save(file)
+                workbook.close()
+                messagebox.showinfo("Успех", "Данные успешно импортированы в Excel!")
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Произошла ошибка: {str(e)}")
+
+    else:
+        messagebox.showerror("Ошибка", "Произведите рассчеты")
+
+
 def resource_path(relative_path):
     base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_path, relative_path)
@@ -111,6 +146,8 @@ def is_int(entry):
 # --- Calculation
 def calculate():
     if validate():
+        global validated
+        validated = 1
         if is_int(prod_amount) and is_int(amount_in_box):
             density, total_volume, total_weight = calc_density()
             log = calc_log(density, total_volume, total_weight)
@@ -169,50 +206,50 @@ def validate():
     win.focus_set()
     valid = 1
 
-    for field in fields:
-        value = field.get()
+    for entry in entries:
+        value = entry.get()
 
         if "," in value:
             upd_val = value.replace(",", ".")
-            field.delete(0, cttk.end)
-            field.insert(0, upd_val)
+            entry.delete(0, cttk.end)
+            entry.insert(0, upd_val)
 
         if not value:
-            field.insert(0, mandatory)
-            field.configure(text_color="red")
+            entry.insert(0, mandatory)
+            entry.configure(text_color="red")
             valid = 0
         elif value == mandatory or value == int_notif or value == not_digit:
             valid = 0
             continue
         elif value == not_digit:
-            field.delete(0, cttk.END)
-            field.insert(0, mandatory)
+            entry.delete(0, cttk.END)
+            entry.insert(0, mandatory)
             valid = 0
         elif not all(digit in digits_seps for digit in value):
-            field.delete(0, cttk.END)
-            field.insert(0, not_digit)
-            field.configure(text_color="red")
+            entry.delete(0, cttk.END)
+            entry.insert(0, not_digit)
+            entry.configure(text_color="red")
             valid = 0
         elif value == "0":
-            field.delete(0, cttk.END)
-            field.insert(0, "0")
-            field.configure(text_color="red")
+            entry.delete(0, cttk.END)
+            entry.insert(0, "0")
+            entry.configure(text_color="red")
             valid = 0
     return valid
 
 
 # --- Params
-create_label("Товар", 0, 0)
-product = create_entry()
-place_entry(product, 1, 0)
-
-create_label("Цена в Китае", 0, 1)
+create_label("Цена в Китае", 0, 0)
 price = create_entry()
-place_entry(price, 1, 1)
+place_entry(price, 1, 0)
 
-create_label("Количество", 0, 2)
+create_label("Количество", 0, 1)
 prod_amount = create_entry()
-place_entry(prod_amount, 1, 2)
+place_entry(prod_amount, 1, 1)
+
+create_label("Кол. шт. в коробке", 0, 2)
+amount_in_box = create_entry()
+place_entry(amount_in_box, 1, 2)
 
 create_label("Высота", 2, 0)
 height = create_entry()
@@ -226,21 +263,17 @@ create_label("Длина", 2, 2)
 length = create_entry()
 place_entry(length, 3, 2)
 
-create_label("Кол. шт. в коробке", 4, 0)
-amount_in_box = create_entry()
-place_entry(amount_in_box, 5, 0)
-
-create_label("Вес", 4, 1)
+create_label("Вес", 4, 0)
 box_weight = create_entry()
-place_entry(box_weight, 5, 1)
+place_entry(box_weight, 5, 0)
 
 
 curr_var = cttk.StringVar(value="7.25")
 
 get_curr()  # --- Getting latest USD/CNY currency
-create_label("Курс $/¥ ", 4, 2)
+create_label("Курс $/¥ ", 4, 1)
 currency = cttk.CTkEntry(win, textvariable=curr_var)
-place_entry(currency, 5, 2)
+place_entry(currency, 5, 1)
 
 
 # --- Calculation result
@@ -248,7 +281,6 @@ place_entry(currency, 5, 2)
 create_label("Стоимость товара", 6, 0)
 goods_cost_bt = create_bt()
 place_bt(goods_cost_bt, 7, 0)
-
 create_label("Упаковка", 6, 1)
 package_bt = create_bt()
 place_bt(package_bt, 7, 1)
@@ -270,11 +302,17 @@ log_bt = create_bt()
 place_bt(log_bt, 9, 2)
 
 
-fields = [price, prod_amount, height, width, length, amount_in_box, box_weight]
+entries = [price, prod_amount, amount_in_box, height, width, length, box_weight]
+buttons = [goods_cost_bt, package_bt, insurance_bt, total_cost_bt, one_goods_bt, log_bt]
 
-cttk.CTkButton(win, text="Рассчитать", command=calculate).grid(
-    row=15, column=1, sticky="wens", pady=10, padx=(25, 0)
-)
+calculate_bt = cttk.CTkButton(
+    win,
+    text="Рассчитать",
+    command=calculate,
+    hover_color="#389147",
+    text_color="white",
+    fg_color="#3fa24f",
+).grid(row=5, column=2, padx=(25, 0), sticky="we")
 
 # --- Creating cargo table
 
@@ -382,13 +420,19 @@ def create_table():
     tree.bind("<<TreeviewSelect>>", select_item)
 
     cttk.CTkButton(win, text="Отменить", command=deselect_item).grid(
-        row=15, column=0, padx=(25, 0), pady=10, sticky="we"
+        row=15, column=0, padx=(25, 0), pady=15, sticky="we"
     )
     cttk.CTkButton(win, text="Сохранить", command=save_cargo).grid(
-        row=15, column=2, padx=(25, 0), pady=10, sticky="we"
+        row=15, column=2, padx=(25, 0), pady=15, sticky="we"
     )
 
     return cargo_dict, discount
+
+
+# --- Excel export
+cttk.CTkButton(win, text="Импортировать в Excel", command=add_data_to_excel).grid(
+    row=15, column=1, padx=(25, 0), pady=15, sticky="we"
+)
 
 
 create_table()
