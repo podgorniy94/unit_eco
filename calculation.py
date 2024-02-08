@@ -23,13 +23,13 @@ validated = 0
 
 
 def add_data_to_excel():
-    product_name = simpledialog.askstring("Товар", "Введите название товара:")
-    if product_name:
-        data = [product_name]
-    else:
-        return
-
     if validated:
+        product_name = simpledialog.askstring("Товар", "Введите название товара:")
+        if product_name:
+            data = [product_name]
+        else:
+            return
+
         data = data + [entry.get() for entry in entries]
         data.append(currency.get())
         data = data + [button.cget("text")[:-2] for button in buttons]
