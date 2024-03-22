@@ -80,12 +80,12 @@ class Calculation(Validation):
 
     @staticmethod
     def calculate_density(
-        product_amount: float | int,
-        amount_in_box: float | int,
-        box_weight: float | int,
-        height: float | int,
-        width: float | int,
-        length: float | int,
+        product_amount: float,
+        amount_in_box: float,
+        box_weight: float,
+        height: float,
+        width: float,
+        length: float,
     ):
         box_amount = ceil(product_amount / amount_in_box)
         print("box_amount", box_amount, "box_weight", box_weight)
