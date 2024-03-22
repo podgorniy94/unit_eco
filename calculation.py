@@ -1,441 +1,368 @@
 import json
-import os
-import sys
 from math import ceil
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from tkinter import Event, ttk
+from typing import Final, Optional
 
 import customtkinter as cttk
-import openpyxl
 import requests
 from pyperclip import copy
 
-cttk.set_appearance_mode("light")
-cttk.set_default_color_theme("dark-blue")
 
-win = cttk.CTk()
-win.title("Calculation")
-win.geometry("660x650")
-win.grid_columnconfigure((0, 1, 2), weight=1)
+class Validation:
+    mandatory: Final = "Обязательное поле"
+    not_digit: Final = "Нечисловое значение"
+    digits_seps: Final = "0123456789,."
+
+    @classmethod
+    def validate(cls, win, entries: dict) -> bool:
+
+        win.focus_set()
+        valid: list = []
+
+        for entry in entries.values():
+            mandatory = cls.mandatory
+            not_digit = cls.not_digit
+            digits_seps = cls.digits_seps
+
+            value = entry.get()
+
+            if "," in value:
+                updated_value = value.replace(",", ".")
+                entry.delete(0, cttk.END)
+                entry.insert(0, updated_value)
+
+            if value == mandatory or value == not_digit:
+                continue
+            elif not value:
+                entry.insert(0, mandatory)
+                entry.configure(text_color="red")
+            elif not all(digit in digits_seps for digit in value):
+                entry.delete(0, cttk.END)
+                entry.insert(0, not_digit)
+                entry.configure(text_color="red")
+            elif value == "0":
+                entry.delete(0, cttk.END)
+                entry.insert(0, "0")
+                entry.configure(text_color="red")
+            else:
+                valid.append(True)
+
+        return len(valid) == len(entries)
+
+    @classmethod
+    def clean(cls, field: cttk.CTkEntry, event: Event) -> None:
+        if type(event) == Event:
+            value = field.get()
+            if value == cls.mandatory or value == cls.not_digit or value == "0":
+                field.configure(text_color="black")
+                field.delete(0, cttk.END)
+
+
+class Calculation(Validation):
+    @classmethod
+    def calculate(cls, win, entries: dict, buttons: dict):
+        if cls.validate(win, entries):
+            for k in entries.keys():
+                entries[k] = float(entries[k].get())
+
+            box_amount = ceil(entries["product_amount"] / entries["amount_in_box"])
+            origin_weight = box_amount * entries["box_weight"]
+            demension = entries["height"] * entries["width"] * entries["length"]
+            volume = demension * box_amount / 100000
+            total_weight = ceil(origin_weight + (volume / 2 * 50))
+            total_volume = volume + (volume / 2 * 0.5)
+            density = total_weight / total_volume
+
+            if density >= 100:
+                cargo_dict, discount = cls.read_cargo_data()
+                filtered = filter(lambda k: int(k) <= density, cargo_dict.keys())
+                max_den = max(filtered, key=int)
+                cargo_coeff = float(cargo_dict[max_den]) - discount
+                log_cost = cargo_coeff * total_weight * entries["currency"]
+            else:
+                log_cost = density * total_volume
+
+            # Calculete and show final results
+            goods_cost = entries["price"] * entries["product_amount"]
+            cls.add_button_text(buttons["goods_cost"], goods_cost)
+            package = total_volume * 210
+            cls.add_button_text(buttons["package"], package)
+            insurance = goods_cost / 100
+            cls.add_button_text(buttons["insurance"], insurance)
+            total_cost = goods_cost + package + log_cost + insurance
+            cls.add_button_text(buttons["total_cost"], total_cost)
+            one_goods_cost = total_cost / entries["product_amount"]
+            cls.add_button_text(buttons["one_goods"], one_goods_cost)
+            cls.add_button_text(buttons["log"], log_cost)
+
+    @classmethod
+    def read_cargo_data(cls):
+        with open("data.json", "r") as file:
+            json_to_dict = json.load(file)
+            cargo_dictionary = json_to_dict["coefficient"]
+            discount = json_to_dict["discount"]
+            return cargo_dictionary, discount
+
+    @staticmethod
+    def add_button_text(bt, cost):
+        text = f"{cost:.0f}" if cost.is_integer() else f"{round(cost, 2)}"
+        bt.configure(text=f"{text} ¥")
+
 
-
-# --- Main Logic
-validated = 0
-
-
-def add_data_to_excel():
-    if validated:
-        product_name = simpledialog.askstring("Товар", "Введите название товара:")
-        if product_name:
-            data = [product_name]
-        else:
-            return
-
-        data = data + [entry.get() for entry in entries]
-        data.append(currency.get())
-        data = data + [button.cget("text")[:-2] for button in buttons]
-
-        try:
-            file = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
-            if file:
-                workbook = openpyxl.load_workbook(file)
-                sheet = workbook.active
-                last_column = sheet.max_column + 1
-
-                for row_num, data_item in enumerate(data, start=1):
-                    sheet.cell(row=row_num, column=last_column, value=data_item)
-                workbook.save(file)
-                workbook.close()
-                messagebox.showinfo("Успех", "Данные успешно импортированы в Excel!")
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Произошла ошибка: {str(e)}")
-
-    else:
-        messagebox.showerror("Ошибка", "Произведите рассчеты")
-
-
-def resource_path(relative_path):
-    base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(base_path, relative_path)
-
-
-data = resource_path("data.json")
-
-
-def create_label(text, row, column):
-    cttk.CTkLabel(win, text=text, anchor="w").grid(
-        row=row, column=column, sticky="we", padx=(25, 0)
-    )
-
-
-def create_bt():
-    return cttk.CTkButton(
-        win, text=" ", fg_color="#e8e8e8", text_color="black", hover_color="#bababa"
-    )
-
-
-def place_bt(bt, row, column):
-    bt.grid(row=row, column=column, padx=(25, 0), sticky="we")
-    bt.configure(command=lambda: copy_to_clip(bt.cget("text")))
-
-
-def create_entry():
-    return cttk.CTkEntry(win)
-
-
-def place_entry(entry, row, column):
-    entry.grid(row=row, column=column, padx=(25, 0), sticky="we")
-    entry.bind("<FocusIn>", lambda event: clean(entry))
-
-
-def dec_number(number):
-    return f"{number:.0f}" if number.is_integer() else f"{number}"
-
-
-def clean(field):
-    value = field.get()
-    if value == mandatory or value == not_digit or value == int_notif or value == "0":
-        field.configure(text_color="black")
-        field.delete(0, cttk.END)
-
-
-def copy_to_clip(text):
-    if text and text != " ":  # ctk button bug
-        copy(text[:-2])
-
-
-def add_bt_text(bt, value):
-    bt.configure(text=f"{dec_number(round(value, 2))} ¥")
-
-
-def get_curr():
-    url = "https://api.freecurrencyapi.com/v1/latest"
-    api_key = "fca_live_CKKpxzepp3RFgAQJD6EPR7TdYphkAwRkO9C6sLOQ"
-    currencies = "CNY"
-
-    params = {"apikey": api_key, "currencies": currencies}
-    response = requests.get(url, params=params)
-
-    if response.status_code == 200:
-        json_data = response.json()["data"]
-        curr_var.set(round(json_data["CNY"], 2))
-
-
-def read_cargo_data():
-
-    with open(data, "r") as file:
-        json_to_dict = json.load(file)
-        cargo_dict = json_to_dict["coefficient"]
-        discount = json_to_dict["discount"]
-        return cargo_dict, discount
-
-
-int_notif = "Введите целое число"
-
-
-def is_int(entry):
-    try:
-        int(entry.get())
-        return True
-    except ValueError:
-        entry.delete(0, cttk.END)
-        entry.insert(0, int_notif)
-        entry.configure(text_color="red")
-        return False
-
-
-# --- Calculation
-def calculate():
-    if validate():
-        global validated
-        validated = 1
-        if is_int(prod_amount) and is_int(amount_in_box):
-            density, total_volume, total_weight = calc_density()
-            log = calc_log(density, total_volume, total_weight)
-            calc_totals(total_volume, log)
-
-
-def calc_density():
-    box_amount = ceil(int(prod_amount.get()) / int(amount_in_box.get()))
-    origin_weight = box_amount * float(box_weight.get())
-    demension = float(height.get()) * float(width.get()) * float(length.get())
-    volume = demension * box_amount / 1000000
-    total_weight = ceil(origin_weight + (volume / 2 * 50))
-    total_volume = volume + (volume / 2 * 0.5)
-    density = total_weight / total_volume
-
-    return density, total_volume, total_weight
-
-
-def calc_log(density, total_volume, total_weight):
-    if density >= 100:
-        cargo_dict, discount = read_cargo_data()
-        max_den = max(filter(lambda k: int(k) <= density, cargo_dict.keys()), key=int)
-        cargo_coeff = float(cargo_dict[max_den]) - discount
-        log_price = cargo_coeff * total_weight * float(curr_var.get())
-    else:
-        log_price = float(density) * total_volume
-
-    return log_price
-
-
-def calc_totals(total_volume, log_price):
-    goods_cost_val = float(price.get()) * int(prod_amount.get())
-    add_bt_text(goods_cost_bt, goods_cost_val)
-
-    package_val = total_volume * 210
-    add_bt_text(package_bt, package_val)
-
-    insurance_val = goods_cost_val / 100
-    add_bt_text(insurance_bt, insurance_val)
-
-    total_cost_val = goods_cost_val + package_val + log_price + insurance_val
-    add_bt_text(total_cost_bt, total_cost_val)
-
-    one_goods_val = total_cost_val / int(prod_amount.get())
-    add_bt_text(one_goods_bt, one_goods_val)
-
-    add_bt_text(log_bt, log_price)
-
-
-mandatory = "Обязательное поле"
-not_digit = "Нечисловое значение"
-digits_seps = "0123456789,."
-
-
-def validate():
-    win.focus_set()
-    valid = 1
-
-    for entry in entries:
-        value = entry.get()
-
-        if "," in value:
-            upd_val = value.replace(",", ".")
-            entry.delete(0, cttk.end)
-            entry.insert(0, upd_val)
-
-        if not value:
-            entry.insert(0, mandatory)
-            entry.configure(text_color="red")
-            valid = 0
-        elif value == mandatory or value == int_notif or value == not_digit:
-            valid = 0
-            continue
-        elif value == not_digit:
-            entry.delete(0, cttk.END)
-            entry.insert(0, mandatory)
-            valid = 0
-        elif not all(digit in digits_seps for digit in value):
-            entry.delete(0, cttk.END)
-            entry.insert(0, not_digit)
-            entry.configure(text_color="red")
-            valid = 0
-        elif value == "0":
-            entry.delete(0, cttk.END)
-            entry.insert(0, "0")
-            entry.configure(text_color="red")
-            valid = 0
-    return valid
-
-
-# --- Params
-create_label("Цена в Китае", 0, 0)
-price = create_entry()
-place_entry(price, 1, 0)
-
-create_label("Количество", 0, 1)
-prod_amount = create_entry()
-place_entry(prod_amount, 1, 1)
-
-create_label("Кол. шт. в коробке", 0, 2)
-amount_in_box = create_entry()
-place_entry(amount_in_box, 1, 2)
-
-create_label("Высота", 2, 0)
-height = create_entry()
-place_entry(height, 3, 0)
-
-create_label("Ширина", 2, 1)
-width = create_entry()
-place_entry(width, 3, 1)
-
-create_label("Длина", 2, 2)
-length = create_entry()
-place_entry(length, 3, 2)
-
-create_label("Вес", 4, 0)
-box_weight = create_entry()
-place_entry(box_weight, 5, 0)
-
-
-curr_var = cttk.StringVar(value="7.25")
-
-get_curr()  # --- Getting latest USD/CNY currency
-create_label("Курс $/¥ ", 4, 1)
-currency = cttk.CTkEntry(win, textvariable=curr_var)
-place_entry(currency, 5, 1)
-
-
-# --- Calculation result
-
-create_label("Стоимость товара", 6, 0)
-goods_cost_bt = create_bt()
-place_bt(goods_cost_bt, 7, 0)
-create_label("Упаковка", 6, 1)
-package_bt = create_bt()
-place_bt(package_bt, 7, 1)
-
-create_label("Страховка", 6, 2)
-insurance_bt = create_bt()
-place_bt(insurance_bt, 7, 2)
-
-create_label("Стоимость груза", 8, 0)
-total_cost_bt = create_bt()
-place_bt(total_cost_bt, 9, 0)
-
-create_label("За единицу", 8, 1)
-one_goods_bt = create_bt()
-place_bt(one_goods_bt, 9, 1)
-
-create_label("Логистика", 8, 2)
-log_bt = create_bt()
-place_bt(log_bt, 9, 2)
-
-
-entries = [price, prod_amount, amount_in_box, height, width, length, box_weight]
-buttons = [goods_cost_bt, package_bt, insurance_bt, total_cost_bt, one_goods_bt, log_bt]
-
-calculate_bt = cttk.CTkButton(
-    win,
-    text="Рассчитать",
-    command=calculate,
-    hover_color="#389147",
-    text_color="white",
-    fg_color="#3fa24f",
-).grid(row=5, column=2, padx=(25, 0), sticky="we")
-
-# --- Creating cargo table
-
-
-def create_table():
-    no_den_var = cttk.IntVar(value="")
-    coeff_var = cttk.StringVar(value=None)
-    den_var = cttk.StringVar(value=None)
-    dis_var = cttk.StringVar(value=None)
-    global discount
-    cargo_dict, discount = read_cargo_data()
-
-    def select_item(event):
-        selected_item = tree.selection()
-        if selected_item:
-            item = tree.item(selected_item)
-            # Filling fields below table based on the selected one.
-            record = item["values"]  # return int I/O str if it's not float
-            no_den_var.set(f"{record[0]} / {record[1]}")
-            den_var.set(record[1])
-            coeff_var.set(str(record[2]))
-            dis_var.set(dec_number(discount))
-
-            # Focusing on the field with the coefficient
-            coeff_entry.focus_set()
-            coeff_entry.icursor(len(str(record[2])))
-
-    def deselect_item():
-        selected_item = tree.selection()
-        if selected_item:
-            tree.selection_remove(selected_item)
-            no_den_var.set(""), coeff_var.set(""), dis_var.set("")
-            win.focus_set()
-
-    def create_label(text, row, column):
-        cttk.CTkLabel(win, text=text, anchor="w").grid(
-            row=row, column=column, sticky="we", padx=(25, 0)
+class Frame(Calculation):
+    # tuple[variable_name, text, row, column, button]
+    labels: list[tuple[str, str, int, int, int]] = [
+        ("price", "Цена в Китае", 0, 0, 0),
+        ("product_amount", "Количество", 0, 1, 0),
+        ("amount_in_box", "Кол. шт. в коробке", 0, 2, 0),
+        ("height", "Высота", 2, 0, 0),
+        ("width", "Ширина", 2, 1, 0),
+        ("length", "Длина", 2, 2, 0),
+        ("box_weight", "Вес", 4, 0, 0),
+        ("currency", "Курс $/¥", 4, 1, 0),
+        ("goods_cost", "Стоимость товара", 6, 0, 1),
+        ("package", "Упаковка", 6, 1, 1),
+        ("insurance", "Страховка", 6, 2, 1),
+        ("total_cost", "Стоимость груза", 8, 0, 1),
+        ("one_goods", "За единицу", 8, 1, 1),
+        ("log", "Логистика", 8, 2, 1),
+    ]
+    entries: dict = {}
+    buttons: dict = {}
+
+    def __new__(cls):
+        win = cttk.CTk()
+        cttk.set_appearance_mode("light")
+        cttk.set_default_color_theme("dark-blue")
+
+        win.title("")
+        win.geometry("660x650")
+        win.grid_columnconfigure((0, 1, 2), weight=1)
+        cls.create_fields(win, cls.labels)
+        return win
+
+    @classmethod
+    def create_fields(cls, win, labels: list[tuple]) -> None:
+        for name, text, row, column, button in labels:
+            cls.create_label(win, text, row, column)
+            row += 1
+            if button:
+                cls.create_button(win, name, row, column)
+            else:
+                cls.create_entry(win, name, row, column)
+
+        cls.update_currency_entry()
+        cls.create_calculate_button(win)
+
+    @classmethod
+    def create_label(cls, win, text, row, column):
+        lb = cttk.CTkLabel(win, text=text, anchor="w")
+        lb.grid(row=row, column=column, sticky="we", padx=(25, 0))
+        return lb
+
+    @classmethod
+    def create_entry(cls, win, name: str, row: int, column: int, validate: bool = True):
+        entry = cttk.CTkEntry(win)
+        if validate:
+            cls.entries[name] = entry
+        entry.grid(row=row, column=column, sticky="we", padx=(25, 0))
+        entry.bind("<FocusIn>", lambda event: cls.clean(entry, event))
+        return entry
+
+    @classmethod
+    def create_button(cls, win, name: str, row: int, column: int) -> None:
+        bt = cttk.CTkButton(
+            win,
+            text="─",
+            fg_color="#e8e8e8",
+            text_color="black",
+            hover_color="#bababa",
         )
+        cls.buttons[name] = bt
+        bt.grid(row=row, column=column, padx=(25, 0), sticky="we")
+        bt.configure(command=lambda: cls.copy_to_clip(bt.cget("text")))
 
-    def load_table(cargo_dict):
-        for i, k in enumerate(cargo_dict):
-            tree.insert("", i, text=i + 1, values=(i + 1, k, cargo_dict[k]))
+    @classmethod
+    def update_currency_entry(cls) -> None:
+        currency = cls.get_currency()
+        currency = currency if currency else "7.25"
+        entry = cls.entries["currency"]
+        entry.insert(0, currency)
 
-    def save_cargo():
+    @classmethod
+    def create_calculate_button(cls, win) -> None:
+        button = cttk.CTkButton(
+            win,
+            text="Рассчитать",
+            command=lambda: cls.calculate(win, cls.entries, cls.buttons),
+            hover_color="#389147",
+            text_color="white",
+            fg_color="#3fa24f",
+        )
+        button.grid(row=5, column=2, padx=(25, 0), sticky="we")
+
+    @staticmethod
+    def get_currency() -> Optional[str]:
+        url = "https://api.freecurrencyapi.com/v1/latest"
+        api_key = "fca_live_CKKpxzepp3RFgAQJD6EPR7TdYphkAwRkO9C6sLOQ"
+        currencies = "CNY"
+
+        params = {"apikey": api_key, "currencies": currencies}
+        response = requests.get(url, params=params)
+
+        if response.status_code == 200:
+            json_data = response.json()["data"]
+            return str(round(json_data["CNY"], 2))
+
+    @staticmethod
+    def copy_to_clip(text: str) -> None:
+        if text and text != " ":  # ctk button behaivior
+            copy(text[:-2])
+
+
+class Table(Frame):
+    columns: Final = ("No", "Density", "Coefficient")
+    tree_position: Final = {
+        "row": 10,
+        "column": 0,
+        "columnspan": 3,
+        "sticky": "nsew",
+        "padx": (20, 0),
+        "pady": (20, 10),
+    }
+
+    def __new__(cls, win):
+        cls.cargo_data, cls.discount_value = cls.read_cargo_data()
+
+        cls.density = cttk.IntVar(value=None)
+        cls.coefficient = cttk.DoubleVar(value=None)
+        cls.discount = cttk.DoubleVar(value=None)
+
+        cls.tree = cls.__create_tree_view(win)
+        cls.__create_cargo_fields(win)
+        cls.__create_buttons(win)
+
+    @classmethod
+    def __create_tree_view(cls, win):
+        columns = cls.columns
+        tree_position = cls.tree_position
+
+        tree = ttk.Treeview(win, columns=columns, show="headings")
+        tree.bind("<<TreeviewSelect>>", cls.select_item)
+        tree.grid(tree_position)
+
+        ttk.Style().theme_use("default")
+
+        for column in columns:
+            tree.heading(column, text=column, anchor=cttk.CENTER)
+            tree.column(column, minwidth=25)
+
+        tree.heading("No", text="No", anchor=cttk.CENTER)
+        tree.heading("Density", text="Плотность", anchor=cttk.CENTER)
+        tree.heading("Coefficient", text="Коэффициент", anchor=cttk.CENTER)
+
+        scrollbar = cttk.CTkScrollbar(win, command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        scrollbar.grid(row=10, column=3, sticky="nsw", pady=(20, 10), padx=(0, 10))
+
+        cls.load_table(tree)
+        return tree
+
+    @classmethod
+    def load_table(cls, tree):
+        cargo = cls.cargo_data
+        for i, k in enumerate(cargo):
+            tree.insert("", i, text=i + 1, values=(i + 1, k, cargo[k]))
+
+    @classmethod
+    def save_cargo(cls):
+        tree = cls.tree
         if tree.selection():
-            coeff_val = coeff_entry.get()
-            global discount
-            discount = float(dis_entry.get())
+            coefficient = cls.coefficient_entry.get()
+            discount = cls.discount_entry.get()
 
-            if "," in coeff_val:
-                upd_val = coeff_val.replace(",", ".")
-                coeff_entry.delete(0, cttk.END)
-                coeff_entry.insert(0, upd_val)
-                coeff_val = upd_val
-            coeff_val = float(coeff_val)
+            if "," in coefficient:
+                coefficient = coefficient.replace(",", ".")
+                cls.coefficient_entry.delete(0, cttk.END)
+                cls.coefficient_entry.insert(0, coefficient)
 
-            number = dec_number(coeff_val)
-            cargo_dict[den_var.get()] = str(number)
+            # Type of keys is string
+            selected_density = str(cls.density.get())
+            selected_coefficient = cls.cargo_data[selected_density]
 
-            with open(data, "w") as file:
-                dict_to_json = {"coefficient": cargo_dict, "discount": discount}
-                json.dump(dict_to_json, file)
+            if selected_coefficient != coefficient:
+                cls.cargo_data[selected_density] = coefficient
 
-            tree.delete(*tree.get_children())
-            load_table(cargo_dict)
-            no_den_var.set(""), coeff_var.set(""), dis_var.set("")
+            with open("data.json", "w") as file:
+                dictionary = {"coefficient": cls.cargo_data, "discount": discount}
+                json.dump(dictionary, file)
+
+            cls.tree.delete(*tree.get_children())
+            cls.load_table(tree)
+
+            cls.density.set(0)
+            cls.coefficient.set(0)
+            cls.discount.set(0)
             win.focus_set()
 
-    # Tree creating
-    tree = ttk.Treeview(win, columns=("No", "Density", "Coeff"), show="headings")
-    ttk.Style().theme_use("default")
+    @classmethod
+    def __create_cargo_fields(cls, win):
+        cls.create_label(win, "Плотность", 11, 0)
+        lb = cls.create_label(win, "No", 12, 0)
+        CENTER = cttk.CENTER
+        lb.configure(fg_color="light gray", textvariable=cls.density, anchor=CENTER)
 
-    tree.grid(
-        row=10, column=0, columnspan=3, sticky="nsew", padx=(20, 0), pady=(20, 10)
-    )
-    tree.column("No", minwidth=25)
-    tree.column("Density", minwidth=25)
-    tree.column("Coeff", minwidth=25)
+        cls.create_label(win, "Коэффициент", 11, 1)
+        cls.coefficient_entry = cls.create_entry(win, "", 12, 1, validate=False)
+        cls.coefficient_entry.configure(textvariable=cls.coefficient)
 
-    tree.heading("No", text="No", anchor=cttk.CENTER)
-    tree.heading("Density", text="Плотность", anchor=cttk.W)
-    tree.heading("Coeff", text="Коэффициент", anchor=cttk.W)
+        cls.create_label(win, "Скидка", 11, 2)
+        cls.discount_entry = cls.create_entry(win, "", 12, 2, validate=False)
+        cls.discount_entry.configure(textvariable=cls.discount)
 
-    scrollbar = cttk.CTkScrollbar(win, command=tree.yview)
-    tree.configure(yscrollcommand=scrollbar.set)
-    scrollbar.grid(row=10, column=3, sticky="nsw", pady=(20, 10), padx=(0, 10))
+    @classmethod
+    def __create_buttons(cls, win):
+        save_bt = cttk.CTkButton(win, text="Сохранить", command=cls.save_cargo)
+        save_bt.grid(row=15, column=0, padx=(25, 0), pady=15, sticky="we")
 
-    # Populated table with values
-    load_table(cargo_dict)
+        text = "Импортировать в Excel"
+        import_bt = cttk.CTkButton(win, text=text, command=cls.import_excel)
+        import_bt.grid(row=15, column=1, padx=(25, 0), pady=15, sticky="we")
 
-    # Fields under table
-    create_label("No / Плотность", 11, 0)
-    create_label("Коэффициент", 11, 1)
-    create_label("Скидка", 11, 2)
+        cancel_bt = cttk.CTkButton(win, text="Отменить", command=cls.deselect_item)
+        cancel_bt.grid(row=15, column=2, padx=(25, 0), pady=15, sticky="we")
 
-    no_den_lb = cttk.CTkLabel(win, textvariable=no_den_var, fg_color="light gray")
-    no_den_lb.grid(row=12, column=0, sticky="we", padx=(25, 0))
+    @classmethod
+    def select_item(cls, event):
+        if type(event) == Event:
+            selected_item = cls.tree.selection()
 
-    coeff_entry = cttk.CTkEntry(win, textvariable=coeff_var)
-    coeff_entry.grid(row=12, column=1, sticky="we", padx=(25, 0))
+            if selected_item:
+                item = cls.tree.item(selected_item[0])
+                values = item["values"]
+                cls.density.set(int(values[1]))
+                cls.coefficient.set(float(values[2]))
+                cls.discount.set(float(cls.discount_value))
 
-    dis_entry = cttk.CTkEntry(win, textvariable=dis_var)
-    dis_entry.grid(row=12, column=2, sticky="we", padx=(25, 0))
+                # Focusing on the field with the coefficient
+                cls.coefficient_entry.focus_set()
+                cls.coefficient_entry.icursor(cttk.END)
 
-    tree.bind("<<TreeviewSelect>>", select_item)
+    @classmethod
+    def deselect_item(cls):
+        selected_item = cls.tree.selection()
+        if selected_item:
+            cls.tree.selection_remove(selected_item)
+            cls.density.set(0)
+            cls.coefficient.set(0)
+            cls.discount.set(0)
+            win.focus_set()
 
-    cttk.CTkButton(win, text="Отменить", command=deselect_item).grid(
-        row=15, column=0, padx=(25, 0), pady=15, sticky="we"
-    )
-    cttk.CTkButton(win, text="Сохранить", command=save_cargo).grid(
-        row=15, column=2, padx=(25, 0), pady=15, sticky="we"
-    )
-
-    return cargo_dict, discount
-
-
-# --- Excel export
-cttk.CTkButton(win, text="Импортировать в Excel", command=add_data_to_excel).grid(
-    row=15, column=1, padx=(25, 0), pady=15, sticky="we"
-)
-
-
-create_table()
+    @staticmethod
+    def import_excel(*args):
+        return args
 
 
+win = Frame()
+Table(win)
 win.mainloop()
