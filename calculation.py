@@ -65,35 +65,64 @@ class Calculation(Validation):
             for k in entries.keys():
                 entries[k] = float(entries[k].get())
 
-            box_amount = ceil(entries["product_amount"] / entries["amount_in_box"])
-            origin_weight = box_amount * entries["box_weight"]
-            demension = entries["height"] * entries["width"] * entries["length"]
-            volume = demension * box_amount / 100000
-            total_weight = ceil(origin_weight + (volume / 2 * 50))
-            total_volume = volume + (volume / 2 * 0.5)
-            density = total_weight / total_volume
+        (product_amount, amount_in_box, box_weight, height, width, length) = (
+            entries["product_amount"],
+            entries["amount_in_box"],
+            entries["box_weight"],
+            entries["height"],
+            entries["width"],
+            entries["length"],
+        )
 
-            if density >= 100:
-                cargo_dict, discount = cls.read_cargo_data()
-                filtered = filter(lambda k: int(k) <= density, cargo_dict.keys())
-                max_den = max(filtered, key=int)
-                cargo_coeff = float(cargo_dict[max_den]) - discount
-                log_cost = cargo_coeff * total_weight * entries["currency"]
-            else:
-                log_cost = density * total_volume
+        cls.calculate_density(
+            product_amount, amount_in_box, box_weight, height, width, length
+        )
 
-            # Calculete and show final results
-            goods_cost = entries["price"] * entries["product_amount"]
-            cls.add_button_text(buttons["goods_cost"], goods_cost)
-            package = total_volume * 210
-            cls.add_button_text(buttons["package"], package)
-            insurance = goods_cost / 100
-            cls.add_button_text(buttons["insurance"], insurance)
-            total_cost = goods_cost + package + log_cost + insurance
-            cls.add_button_text(buttons["total_cost"], total_cost)
-            one_goods_cost = total_cost / entries["product_amount"]
-            cls.add_button_text(buttons["one_goods"], one_goods_cost)
-            cls.add_button_text(buttons["log"], log_cost)
+    @staticmethod
+    def calculate_density(
+        product_amount: float | int,
+        amount_in_box: float | int,
+        box_weight: float | int,
+        height: float | int,
+        width: float | int,
+        length: float | int,
+    ):
+        box_amount = ceil(product_amount / amount_in_box)
+        print("box_amount", box_amount, "box_weight", box_weight)
+        origin_weight = box_amount * box_weight
+        print("origin_weight", origin_weight)
+        dimension = height * width * length
+        print("dimension", dimension)
+        volume = dimension * box_amount / 1000000
+        print("volume", volume)
+        total_weight = origin_weight + (volume / 2 * 50)
+        print("total_weight", total_weight)
+        total_volume = volume + (volume / 2 * 0.5)
+        print("total_volume", total_volume)
+        density = total_weight / total_volume
+        return ceil(density)
+
+        # if density >= 100:
+        #     cargo_dict, discount = cls.read_cargo_data()
+        #     filtered = filter(lambda k: int(k) <= density, cargo_dict.keys())
+        #     max_den = max(filtered, key=int)
+        #     cargo_coeff = float(cargo_dict[max_den]) - discount
+        #     log_cost = cargo_coeff * total_weight * entries["currency"]
+        # else:
+        #     log_cost = density * total_volume
+        #
+        # # Calculete and show final results
+        # goods_cost = entries["price"] * entries["product_amount"]
+        # cls.add_button_text(buttons["goods_cost"], goods_cost)
+        # package = total_volume * 210
+        # cls.add_button_text(buttons["package"], package)
+        # insurance = goods_cost / 100
+        # cls.add_button_text(buttons["insurance"], insurance)
+        # total_cost = goods_cost + package + log_cost + insurance
+        # cls.add_button_text(buttons["total_cost"], total_cost)
+        # one_goods_cost = total_cost / entries["product_amount"]
+        # cls.add_button_text(buttons["one_goods"], one_goods_cost)
+        # cls.add_button_text(buttons["log"], log_cost)
 
     @classmethod
     def read_cargo_data(cls):
@@ -363,6 +392,7 @@ class Table(Frame):
         return args
 
 
-win = Frame()
-Table(win)
-win.mainloop()
+if __name__ == "__main__":
+    win = Frame()
+    Table(win)
+    win.mainloop()
