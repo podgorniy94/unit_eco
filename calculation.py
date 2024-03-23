@@ -378,10 +378,12 @@ class Table(Frame):
 
             cls.tree.delete(*tree.get_children())
             cls.load_table(tree)
+            cls.discount_value = discount
 
             cls.density.set(0)
             cls.coefficient.set(0)
             cls.discount.set(0)
+
             win.focus_set()
 
     @classmethod
