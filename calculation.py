@@ -1,9 +1,10 @@
 import json
 from math import ceil
-from tkinter import Event, ttk
+from tkinter import Event, filedialog, messagebox, simpledialog, ttk
 from typing import Final, Optional
 
 import customtkinter as cttk
+import openpyxl
 import requests
 from pyperclip import copy
 
@@ -62,24 +63,41 @@ class Calculation(Validation):
     @classmethod
     def calculate(cls, win, entries: dict, buttons: dict):
         if cls.validate(win, entries):
-            for k in entries.keys():
-                entries[k] = float(entries[k].get())
+            density_args = (
+                entries["product_amount"],
+                entries["amount_in_box"],
+                entries["box_weight"],
+                entries["height"],
+                entries["width"],
+                entries["length"],
+            )
+            density_args = [float(i.get()) for i in density_args]
+            costs_args = (
+                entries["price"],
+                entries["product_amount"],
+                entries["currency"],
+            )
+            price, product_amount, currency = [float(i.get()) for i in costs_args]
 
-        (product_amount, amount_in_box, box_weight, height, width, length) = (
-            entries["product_amount"],
-            entries["amount_in_box"],
-            entries["box_weight"],
-            entries["height"],
-            entries["width"],
-            entries["length"],
-        )
+            bts = (
+                buttons["goods_cost"],
+                buttons["package"],
+                buttons["insurance"],
+                buttons["total_cost"],
+                buttons["one_goods"],
+                buttons["cargo"],
+            )
 
-        cls.calculate_density(
-            product_amount, amount_in_box, box_weight, height, width, length
-        )
+            density, total_weight, total_volume = cls.calculate_density(*density_args)
+            cargo = cls.calculate_cargo(density, total_weight, total_volume, currency)
+            costs = cls.calculate_costs(price, product_amount, total_volume, cargo)
 
-    @staticmethod
+            for i in range(len(bts)):
+                cls.add_button_text(bts[i], costs[i])
+
+    @classmethod
     def calculate_density(
+        cls,
         product_amount: float,
         amount_in_box: float,
         box_weight: float,
@@ -88,41 +106,39 @@ class Calculation(Validation):
         length: float,
     ):
         box_amount = ceil(product_amount / amount_in_box)
-        print("box_amount", box_amount, "box_weight", box_weight)
         origin_weight = box_amount * box_weight
-        print("origin_weight", origin_weight)
         dimension = height * width * length
-        print("dimension", dimension)
         volume = dimension * box_amount / 1000000
-        print("volume", volume)
         total_weight = origin_weight + (volume / 2 * 50)
-        print("total_weight", total_weight)
         total_volume = volume + (volume / 2 * 0.5)
-        print("total_volume", total_volume)
         density = total_weight / total_volume
-        return ceil(density)
 
-        # if density >= 100:
-        #     cargo_dict, discount = cls.read_cargo_data()
-        #     filtered = filter(lambda k: int(k) <= density, cargo_dict.keys())
-        #     max_den = max(filtered, key=int)
-        #     cargo_coeff = float(cargo_dict[max_den]) - discount
-        #     log_cost = cargo_coeff * total_weight * entries["currency"]
-        # else:
-        #     log_cost = density * total_volume
-        #
-        # # Calculete and show final results
-        # goods_cost = entries["price"] * entries["product_amount"]
-        # cls.add_button_text(buttons["goods_cost"], goods_cost)
-        # package = total_volume * 210
-        # cls.add_button_text(buttons["package"], package)
-        # insurance = goods_cost / 100
-        # cls.add_button_text(buttons["insurance"], insurance)
-        # total_cost = goods_cost + package + log_cost + insurance
-        # cls.add_button_text(buttons["total_cost"], total_cost)
-        # one_goods_cost = total_cost / entries["product_amount"]
-        # cls.add_button_text(buttons["one_goods"], one_goods_cost)
-        # cls.add_button_text(buttons["log"], log_cost)
+        return ceil(density), round(total_weight, 2), round(total_volume, 2)
+
+    @classmethod
+    def calculate_cargo(cls, density, total_weight, total_volume, currency):
+        if density >= 100:
+            cargo_dict, discount = cls.read_cargo_data()
+
+            while str(density) not in cargo_dict.keys():
+                density -= 1
+
+            cargo_coefficient = float(cargo_dict[str(density)]) - float(discount)
+            cargo = cargo_coefficient * total_weight * currency
+        else:
+            cargo = density * total_volume
+
+        return ceil(cargo)
+
+    @classmethod
+    def calculate_costs(cls, price, product_amount, total_volume, cargo):
+        """Calculete costs"""
+        goods_cost = round(price * product_amount, 2)
+        package = round(total_volume * 210, 2)
+        insurance = round(goods_cost / 100, 2)
+        total_cost = round(goods_cost + package + cargo + insurance, 2)
+        one_goods_cost = round(total_cost / product_amount, 2)
+        return goods_cost, package, insurance, total_cost, one_goods_cost, cargo
 
     @classmethod
     def read_cargo_data(cls):
@@ -154,7 +170,7 @@ class Frame(Calculation):
         ("insurance", "Страховка", 6, 2, 1),
         ("total_cost", "Стоимость груза", 8, 0, 1),
         ("one_goods", "За единицу", 8, 1, 1),
-        ("log", "Логистика", 8, 2, 1),
+        ("cargo", "Логистика", 8, 2, 1),
     ]
     entries: dict = {}
     buttons: dict = {}
@@ -229,6 +245,40 @@ class Frame(Calculation):
             fg_color="#3fa24f",
         )
         button.grid(row=5, column=2, padx=(25, 0), sticky="we")
+
+    @classmethod
+    def import_excel(cls):
+        entries = cls.entries
+        buttons = cls.buttons
+
+        if cls.validate(win, entries):
+            product_name = simpledialog.askstring("Товар", "Введите название товара:")
+            if product_name:
+                data = [product_name]
+            else:
+                return
+
+            data = data + [entry.get() for entry in entries.values()]
+            data = data + [button.cget("text")[:-2] for button in buttons.values()]
+
+            try:
+                file = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
+                if file:
+                    workbook = openpyxl.load_workbook(file)
+                    sheet = workbook.active
+                    last_column = sheet.max_column + 1
+
+                    for row_num, data_item in enumerate(data, start=1):
+                        sheet.cell(row=row_num, column=last_column, value=data_item)
+                    workbook.save(file)
+                    workbook.close()
+                    info = ("Успех", "Данные успешно импортированы в Excel!")
+                    messagebox.showinfo(*info)
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Произошла ошибка: {str(e)}")
+
+        else:
+            messagebox.showerror("Ошибка", "Произведите рассчеты")
 
     @staticmethod
     def get_currency() -> Optional[str]:
@@ -386,10 +436,6 @@ class Table(Frame):
             cls.coefficient.set(0)
             cls.discount.set(0)
             win.focus_set()
-
-    @staticmethod
-    def import_excel(*args):
-        return args
 
 
 if __name__ == "__main__":
